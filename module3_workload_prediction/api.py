@@ -4,6 +4,8 @@ import time
 import json
 import random
 import yaml
+import subprocess
+import shutil
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, Query, Response, Request
 from fastapi.staticfiles import StaticFiles
@@ -174,10 +176,17 @@ def get_full_state():
     forecast = inference_engine.forecast_from_history(df_history)
     nodes = node_inspector.get_candidate_nodes()
     ranked_nodes = node_ranker.rank_nodes(nodes, forecast)
+    live_pods = node_inspector.get_live_pods()
+    displayed_pods = live_pods if live_pods else ACTIVE_PODS
+
+    ctx = getattr(node_inspector, "cluster_context", None)
+    is_gke = bool(node_inspector.k8s_available and ctx and "gke" in str(ctx).lower())
 
     return {
         "timestamp": time.time(),
         "k8s_connected": node_inspector.k8s_available,
+        "cluster_context": ctx,
+        "is_gke": is_gke,
         "models": {
             "lstm_loaded": inference_engine.lstm_loaded,
             "xgboost_loaded": inference_engine.xgb_loaded,
@@ -194,7 +203,7 @@ def get_full_state():
         "latest_forecast": forecast,
         "nodes": ranked_nodes,
         "selected_node": ranked_nodes[0]["name"] if ranked_nodes else "worker-2",
-        "pods": ACTIVE_PODS,
+        "pods": displayed_pods,
     }
 
 
@@ -326,6 +335,287 @@ def list_plots():
         {"title": "13. Node Ranking Progression", "desc": "Multi-Objective composite node ranking scores over time", "url": "/plots/plot_13_node_ranking_progression.png"},
     ]
     return {"plots": plots_meta}
+
+
+# ==============================================================================
+# Google Cloud CLI & GKE Management Endpoints
+# ==============================================================================
+
+def get_cli_tool(name: str) -> str:
+    """Resolve executable path for gcloud, kubectl, or minikube on Windows / Linux."""
+    p = shutil.which(name) or shutil.which(f"{name}.cmd") or shutil.which(f"{name}.exe")
+    if p and os.path.exists(p):
+        return p
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    known = {
+        "gcloud": [
+            os.path.join(local_app_data, "Google", "Cloud SDK", "google-cloud-sdk", "bin", "gcloud.cmd"),
+            r"C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+            r"C:\Program Files\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+        ],
+        "kubectl": [
+            os.path.join(local_app_data, "Programs", "k8s-tools", "kubectl.exe"),
+            os.path.join(local_app_data, "Google", "Cloud SDK", "google-cloud-sdk", "bin", "kubectl.exe"),
+        ],
+        "minikube": [
+            os.path.join(local_app_data, "Programs", "k8s-tools", "minikube.exe"),
+        ],
+    }
+    for cand in known.get(name, []):
+        if os.path.exists(cand):
+            return cand
+    return name
+
+
+def run_cli_cmd(cmd_list: List[str], timeout: int = 30) -> Dict[str, Any]:
+    """Execute a CLI tool safely and capture stdout/stderr."""
+    try:
+        cmd_exec = list(cmd_list)
+        if os.name == "nt" and cmd_exec and cmd_exec[0].lower().endswith(".cmd"):
+            cmd_exec = ["cmd", "/c"] + cmd_exec
+        res = subprocess.run(
+            cmd_exec,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return {
+            "success": res.returncode == 0,
+            "returncode": res.returncode,
+            "stdout": res.stdout.strip(),
+            "stderr": res.stderr.strip(),
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": str(exc),
+        }
+
+
+@app.get("/api/cloud/status")
+def get_cloud_status():
+    """Returns comprehensive Google Cloud CLI, GKE, and Kubectl connection state."""
+    gcloud_bin = get_cli_tool("gcloud")
+    kubectl_bin = get_cli_tool("kubectl")
+
+    # 1. GCloud Version & Auth Plugin
+    gcloud_res = run_cli_cmd([gcloud_bin, "version"])
+    gcloud_installed = gcloud_res["success"]
+    gcloud_ver_line = gcloud_res["stdout"].splitlines()[0] if gcloud_res["stdout"] else "Not installed"
+    has_gke_plugin = "gke-gcloud-auth-plugin" in gcloud_res["stdout"]
+
+    # 2. Auth Account
+    auth_res = run_cli_cmd([gcloud_bin, "auth", "list", "--format=json"])
+    auth_accounts = []
+    active_account = None
+    if auth_res["success"] and auth_res["stdout"]:
+        try:
+            auth_accounts = json.loads(auth_res["stdout"])
+            for acc in auth_accounts:
+                if acc.get("status") == "ACTIVE":
+                    active_account = acc.get("account")
+                    break
+        except Exception:
+            pass
+
+    # 3. Project & Zone Config
+    cfg_res = run_cli_cmd([gcloud_bin, "config", "list", "--format=json"])
+    project_id = None
+    compute_zone = "us-central1-a"
+    compute_region = "us-central1"
+    if cfg_res["success"] and cfg_res["stdout"]:
+        try:
+            cfg_dict = json.loads(cfg_res["stdout"])
+            core = cfg_dict.get("core", {})
+            compute = cfg_dict.get("compute", {})
+            project_id = core.get("project")
+            compute_zone = compute.get("zone", compute_zone)
+            compute_region = compute.get("region", compute_region)
+        except Exception:
+            pass
+
+    # 4. Kubectl client info & current context
+    k8s_ctx_res = run_cli_cmd([kubectl_bin, "config", "current-context"])
+    current_context = k8s_ctx_res["stdout"] if k8s_ctx_res["success"] else None
+
+    # Check live nodes if connected
+    node_inspector.reconnect()
+    candidate_nodes = node_inspector.get_candidate_nodes()
+    is_live_gke = bool(node_inspector.k8s_available and current_context and "gke" in current_context.lower())
+
+    # 5. List GKE Clusters (if project and auth configured)
+    clusters = []
+    if active_account and project_id:
+        clusters_res = run_cli_cmd([gcloud_bin, "container", "clusters", "list", "--format=json"], timeout=15)
+        if clusters_res["success"] and clusters_res["stdout"]:
+            try:
+                raw_clusters = json.loads(clusters_res["stdout"])
+                for c in raw_clusters:
+                    clusters.append({
+                        "name": c.get("name"),
+                        "location": c.get("location"),
+                        "status": c.get("status"),
+                        "currentNodeCount": c.get("currentNodeCount"),
+                        "endpoint": c.get("endpoint"),
+                    })
+            except Exception:
+                pass
+
+    return {
+        "timestamp": time.time(),
+        "gcloud": {
+            "installed": gcloud_installed,
+            "version": gcloud_ver_line,
+            "gke_auth_plugin": has_gke_plugin,
+            "path": gcloud_bin,
+        },
+        "auth": {
+            "active_account": active_account,
+            "accounts": [a.get("account") for a in auth_accounts if isinstance(a, dict)],
+            "is_logged_in": active_account is not None,
+        },
+        "config": {
+            "project_id": project_id,
+            "zone": compute_zone,
+            "region": compute_region,
+        },
+        "kubernetes": {
+            "installed": bool(kubectl_bin),
+            "connected": node_inspector.k8s_available,
+            "context": current_context,
+            "is_gke": is_live_gke,
+            "node_count": len(candidate_nodes),
+            "nodes": [n.get("name") for n in candidate_nodes],
+        },
+        "gke_clusters": clusters,
+    }
+
+
+class CloudProjectRequest(BaseModel):
+    project_id: str
+    zone: Optional[str] = "us-central1-a"
+    region: Optional[str] = "us-central1"
+
+
+@app.post("/api/cloud/project")
+def set_cloud_project(req: CloudProjectRequest):
+    """Sets active GCP Project ID, zone, and region in gcloud config."""
+    gcloud_bin = get_cli_tool("gcloud")
+    res1 = run_cli_cmd([gcloud_bin, "config", "set", "project", req.project_id])
+    if req.zone:
+        run_cli_cmd([gcloud_bin, "config", "set", "compute/zone", req.zone])
+    if req.region:
+        run_cli_cmd([gcloud_bin, "config", "set", "compute/region", req.region])
+    return {
+        "success": res1["success"],
+        "project_id": req.project_id,
+        "output": res1["stdout"] or res1["stderr"],
+    }
+
+
+class GKEConnectRequest(BaseModel):
+    cluster_name: str
+    zone: Optional[str] = "us-central1-a"
+    project_id: Optional[str] = None
+
+
+@app.post("/api/cloud/gke/connect")
+def connect_gke_cluster(req: GKEConnectRequest):
+    """Fetches credentials for GKE cluster and reloads node inspector."""
+    gcloud_bin = get_cli_tool("gcloud")
+    cmd = [gcloud_bin, "container", "clusters", "get-credentials", req.cluster_name, "--zone", req.zone]
+    if req.project_id:
+        cmd.extend(["--project", req.project_id])
+    res = run_cli_cmd(cmd, timeout=45)
+
+    connected = node_inspector.reconnect()
+    nodes = node_inspector.get_candidate_nodes()
+    live_pods = node_inspector.get_live_pods()
+
+    return {
+        "success": res["success"],
+        "stdout": res["stdout"],
+        "stderr": res["stderr"],
+        "k8s_connected": connected,
+        "cluster_context": node_inspector.cluster_context,
+        "nodes": nodes,
+        "pods": live_pods,
+    }
+
+
+@app.post("/api/cloud/gke/deploy")
+def deploy_to_gke():
+    """Applies kubernetes/gke/gke-deploy.yaml to the connected Kubernetes / GKE cluster."""
+    kubectl_bin = get_cli_tool("kubectl")
+    manifest_path = os.path.join(PROJECT_ROOT, "kubernetes", "gke", "gke-deploy.yaml")
+    if not os.path.exists(manifest_path):
+        return {"success": False, "error": "Manifest file kubernetes/gke/gke-deploy.yaml not found."}
+
+    res = run_cli_cmd([kubectl_bin, "apply", "-f", manifest_path], timeout=60)
+    time.sleep(1)
+    pods = node_inspector.get_live_pods()
+    return {
+        "success": res["success"],
+        "stdout": res["stdout"],
+        "stderr": res["stderr"],
+        "live_pods": pods,
+    }
+
+
+class CloudCommandRequest(BaseModel):
+    command: str
+
+
+@app.post("/api/cloud/command")
+def execute_cloud_command(req: CloudCommandRequest):
+    """Safely executes gcloud, kubectl, or minikube commands and returns live terminal output."""
+    raw = req.command.strip()
+    if not raw:
+        return {"success": False, "output": "Empty command string."}
+
+    parts = raw.split()
+    base_cmd = parts[0].lower()
+
+    if base_cmd not in ["gcloud", "kubectl", "minikube"]:
+        return {
+            "success": False,
+            "output": f"Security restriction: Only 'gcloud', 'kubectl', and 'minikube' commands are supported. Received: '{base_cmd}'",
+        }
+
+    resolved_bin = get_cli_tool(base_cmd)
+    full_cmd = [resolved_bin] + parts[1:]
+    res = run_cli_cmd(full_cmd, timeout=60)
+    output = res["stdout"] if res["stdout"] else res["stderr"]
+    return {
+        "success": res["success"],
+        "returncode": res["returncode"],
+        "output": output or "(No output returned)",
+    }
+
+
+@app.post("/api/cloud/cloudrun/deploy")
+def deploy_cloud_run(region: str = Query("us-central1")):
+    """Initiates Google Cloud Run container deployment."""
+    gcloud_bin = get_cli_tool("gcloud")
+    cmd = [
+        gcloud_bin, "run", "deploy", "proactive-scheduler-portal",
+        "--source", PROJECT_ROOT,
+        "--platform", "managed",
+        "--region", region,
+        "--allow-unauthenticated",
+        "--port", "8000",
+        "--memory", "2Gi",
+        "--cpu", "2",
+        "--min-instances", "1",
+    ]
+    res = run_cli_cmd(cmd, timeout=180)
+    return {
+        "success": res["success"],
+        "stdout": res["stdout"],
+        "stderr": res["stderr"],
+    }
 
 
 @app.get("/scheduler/status")

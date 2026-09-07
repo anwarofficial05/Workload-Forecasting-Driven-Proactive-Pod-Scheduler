@@ -14,23 +14,62 @@ class KubernetesNodeInspector:
 
     def __init__(self):
         self.k8s_available = False
+        self.cluster_context = None
+        self.reconnect()
+
+    def reconnect(self) -> bool:
+        """Attempt to connect or reconnect to Kubernetes API (local, in-cluster, or GKE cloud)."""
+        self.k8s_available = False
+        self.cluster_context = None
         try:
             from kubernetes import client, config
             try:
                 config.load_incluster_config()
                 self.k8s_available = True
+                self.cluster_context = "in-cluster"
             except Exception:
                 try:
                     config.load_kube_config()
                     self.k8s_available = True
+                    # Retrieve current context name
+                    _, active_ctx = config.list_kube_config_contexts()
+                    if active_ctx:
+                        self.cluster_context = active_ctx.get("name")
                 except Exception:
                     self.k8s_available = False
 
             if self.k8s_available:
                 self.v1 = client.CoreV1Api()
-                logger.info("Connected to Kubernetes API for node inspection")
+                logger.info(f"Connected to Kubernetes API (Context: {self.cluster_context})")
+                return True
         except Exception as exc:
             logger.warning(f"Kubernetes client unavailable: {exc}")
+        return False
+
+    def get_live_pods(self) -> List[Dict[str, Any]]:
+        """Fetch active workload pods from Kubernetes API."""
+        if not self.k8s_available:
+            return []
+        try:
+            pod_list = self.v1.list_pod_for_all_namespaces()
+            pods = []
+            for p in pod_list.items:
+                ns = p.metadata.namespace
+                if ns in ["kube-system", "kube-public", "kube-node-lease", "gke-managed-system", "gke-managed-cim"]:
+                    continue
+                pods.append({
+                    "name": p.metadata.name,
+                    "namespace": ns,
+                    "status": p.status.phase or "Running",
+                    "node": p.spec.node_name or "Unassigned",
+                    "ip": p.status.pod_ip or "Pending",
+                    "scheduler": p.spec.scheduler_name or "default-scheduler",
+                    "age": "Active",
+                })
+            return pods
+        except Exception as exc:
+            logger.warning(f"Error reading live pods: {exc}")
+            return []
 
     def get_candidate_nodes(self) -> List[Dict[str, Any]]:
         """Fetch real nodes from Kubernetes API or return realistic cluster nodes if offline."""

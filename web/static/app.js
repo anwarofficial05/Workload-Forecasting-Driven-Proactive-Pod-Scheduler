@@ -5,13 +5,15 @@
 let forecastChart = null;
 let latencyChart = null;
 
-// Tab Switching
+// Tab Switching & Initialization
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   initCharts();
   loadEvaluationPlots();
   fetchState();
+  fetchCloudStatus();
   setInterval(fetchState, 3000); // Poll every 3 seconds
+  setInterval(fetchCloudStatus, 8000); // Poll cloud status every 8 seconds
 });
 
 function initTabs() {
@@ -150,9 +152,16 @@ async function fetchState() {
     const data = await res.json();
 
     // 1. Update Header Pills
-    document.getElementById("pill-k8s").innerHTML = data.k8s_connected
-      ? '<span class="status-dot dot-green"></span> Live Kubernetes Cluster'
-      : '<span class="status-dot dot-blue"></span> Simulation / Standalone Mode';
+    if (data.is_gke) {
+      document.getElementById("pill-k8s").innerHTML =
+        `<span class="status-dot dot-green"></span> GKE Cloud: ${data.cluster_context || "Active"}`;
+    } else if (data.k8s_connected) {
+      document.getElementById("pill-k8s").innerHTML =
+        `<span class="status-dot dot-green"></span> Live K8s: ${data.cluster_context || "Connected"}`;
+    } else {
+      document.getElementById("pill-k8s").innerHTML =
+        '<span class="status-dot dot-blue"></span> Cluster: Standalone / Simulation';
+    }
 
     document.getElementById("pill-models").innerHTML =
       '<span class="status-dot dot-green"></span> LSTM + XGBoost Ready';
@@ -395,4 +404,236 @@ async function loadEvaluationPlots() {
   } catch (err) {
     console.warn("Could not load plots gallery:", err);
   }
+}
+
+// ==============================================================================
+// Google Cloud Platform & GKE Console Management
+// ==============================================================================
+
+async function fetchCloudStatus(manual = false) {
+  try {
+    const res = await fetch("/api/cloud/status");
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // 1. GCloud Info
+    const cliElem = document.getElementById("cloud-cli-version");
+    const pluginElem = document.getElementById("cloud-cli-plugin");
+    if (cliElem && data.gcloud) {
+      cliElem.innerText = data.gcloud.installed ? data.gcloud.version : "Not Detected";
+      cliElem.style.color = data.gcloud.installed ? "#10b981" : "#ef4444";
+      pluginElem.innerText = data.gcloud.gke_auth_plugin
+        ? "GKE Auth Plugin: Ready (v0.5.19)"
+        : "GKE Auth Plugin: Not Installed";
+      pluginElem.style.color = data.gcloud.gke_auth_plugin ? "#10b981" : "#f59e0b";
+    }
+
+    // 2. Auth Account
+    const accElem = document.getElementById("cloud-auth-account");
+    const authStatus = document.getElementById("cloud-auth-status");
+    if (accElem && data.auth) {
+      accElem.innerText = data.auth.active_account || "No Account Logged In";
+      accElem.style.color = data.auth.is_logged_in ? "#06b6d4" : "#9ca3af";
+      authStatus.innerText = data.auth.is_logged_in ? "Authenticated via GCP OAuth" : "Click 'Login with Google Cloud'";
+    }
+
+    // 3. Project input default
+    if (data.config && data.config.project_id) {
+      const projInput = document.getElementById("input-cloud-project");
+      if (projInput && !projInput.value) {
+        projInput.value = data.config.project_id;
+      }
+    }
+
+    // 4. Kubernetes context
+    const ctxElem = document.getElementById("cloud-k8s-context");
+    const k8sStatus = document.getElementById("cloud-k8s-status");
+    if (ctxElem && data.kubernetes) {
+      ctxElem.innerText = data.kubernetes.context || "No Active K8s Context";
+      ctxElem.style.color = data.kubernetes.connected ? "#10b981" : "#f59e0b";
+      const gkeLabel = data.kubernetes.is_gke ? " [GKE Cloud]" : "";
+      k8sStatus.innerText = `${data.kubernetes.node_count} Worker Node(s) Available${gkeLabel}`;
+    }
+
+    // 5. Cluster list
+    const clustersBox = document.getElementById("cloud-clusters-list");
+    if (clustersBox) {
+      if (data.gke_clusters && data.gke_clusters.length > 0) {
+        clustersBox.innerHTML = data.gke_clusters
+          .map(
+            (c) =>
+              `<div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.4); padding: 0.5rem; border-radius: 4px; margin-bottom: 0.3rem;">
+                <div>
+                  <b style="color: #38bdf8;">${c.name}</b> (${c.location}) - <span style="color: #10b981;">${c.status}</span> [${c.currentNodeCount} nodes]
+                </div>
+                <button class="btn" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="quickConnectCluster('${c.name}', '${c.location}')">Connect</button>
+              </div>`
+          )
+          .join("");
+      } else {
+        clustersBox.innerText = data.auth.is_logged_in
+          ? "No GKE clusters found in project, or API still synchronizing."
+          : "Sign in with Google Cloud to discover clusters in your project.";
+      }
+    }
+
+    if (manual) {
+      appendTerminalOutput(`[CLOUD STATUS] Refreshed.\nGCloud: ${data.gcloud.version}\nAuth: ${data.auth.active_account || "Not Logged In"}\nK8s Context: ${data.kubernetes.context || "None"}\nConnected: ${data.kubernetes.connected}`);
+    }
+  } catch (err) {
+    console.warn("fetchCloudStatus error:", err);
+  }
+}
+
+async function saveCloudProject() {
+  const proj = document.getElementById("input-cloud-project").value.trim();
+  const zone = document.getElementById("input-cloud-zone").value.trim();
+  const region = document.getElementById("input-cloud-region").value.trim();
+  if (!proj) {
+    alert("Please enter a valid GCP Project ID.");
+    return;
+  }
+  appendTerminalOutput(`[GCLOUD] Setting active project to: ${proj} (Zone: ${zone}, Region: ${region})...`);
+  try {
+    const res = await fetch("/api/cloud/project", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: proj, zone, region }),
+    });
+    const data = await res.json();
+    appendTerminalOutput(`[GCLOUD OUTPUT]\n${data.output || "Project configured successfully."}`);
+    fetchCloudStatus();
+  } catch (err) {
+    appendTerminalOutput(`[ERROR] Failed to set project: ${err}`);
+  }
+}
+
+function initiateGCloudLogin() {
+  appendTerminalOutput(`[GCLOUD AUTH] To authenticate, run in PowerShell:\n  gcloud auth login\n\nOr click below to inspect current active auth credentials.`);
+  runQuickCommand("gcloud auth list");
+}
+
+async function connectGKECluster() {
+  const cluster = document.getElementById("input-gke-cluster").value.trim();
+  const zone = document.getElementById("input-cloud-zone").value.trim();
+  const project = document.getElementById("input-cloud-project").value.trim();
+  if (!cluster) {
+    alert("Please specify a GKE cluster name.");
+    return;
+  }
+  const btn = document.getElementById("btn-connect-gke");
+  btn.innerText = "Connecting...";
+  btn.disabled = true;
+
+  appendTerminalOutput(`[GKE] Fetching credentials for cluster '${cluster}' (zone: ${zone})...`);
+  try {
+    const res = await fetch("/api/cloud/gke/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cluster_name: cluster, zone, project_id: project || null }),
+    });
+    const data = await res.json();
+    if (data.success || data.k8s_connected) {
+      appendTerminalOutput(`[GKE SUCCESS] Connected to cluster '${cluster}'!\nActive Context: ${data.cluster_context}\nNodes: ${JSON.stringify(data.nodes.map(n => n.name))}`);
+      logConsole(`[GKE] Connected to cloud cluster: ${cluster}. Live node scoring active.`);
+    } else {
+      appendTerminalOutput(`[GKE NOTICE] Output:\n${data.stdout || data.stderr}`);
+    }
+    fetchCloudStatus();
+    fetchState();
+  } catch (err) {
+    appendTerminalOutput(`[ERROR] Connection failed: ${err}`);
+  } finally {
+    btn.innerText = "Connect GKE";
+    btn.disabled = false;
+  }
+}
+
+function quickConnectCluster(name, location) {
+  document.getElementById("input-gke-cluster").value = name;
+  document.getElementById("input-cloud-zone").value = location;
+  connectGKECluster();
+}
+
+async function deploySystemToGKE() {
+  const btn = document.getElementById("btn-deploy-gke");
+  btn.innerText = "Deploying...";
+  btn.disabled = true;
+  appendTerminalOutput(`[DEPLOY] Applying kubernetes/gke/gke-deploy.yaml to current Kubernetes cluster...`);
+
+  try {
+    const res = await fetch("/api/cloud/gke/deploy", { method: "POST" });
+    const data = await res.json();
+    appendTerminalOutput(`[DEPLOY RESULT]\n${data.stdout || data.stderr || "Applied manifests."}`);
+    if (data.live_pods && data.live_pods.length > 0) {
+      appendTerminalOutput(`[PODS DISCOVERED] Found ${data.live_pods.length} active pods in cluster.`);
+    }
+    logConsole(`[GKE DEPLOY] Deployed proactive scheduler manifests to cluster.`);
+    fetchState();
+  } catch (err) {
+    appendTerminalOutput(`[ERROR] GKE Deployment failed: ${err}`);
+  } finally {
+    btn.innerText = "Deploy to GKE";
+    btn.disabled = false;
+  }
+}
+
+async function deployPortalToCloudRun() {
+  const btn = document.getElementById("btn-deploy-cloudrun");
+  btn.innerText = "Initiating...";
+  btn.disabled = true;
+  const region = document.getElementById("input-cloud-region").value.trim() || "us-central1";
+
+  appendTerminalOutput(`[CLOUD RUN] Launching build and deploy of portal to Google Cloud Run (Region: ${region})...\nCommand: gcloud run deploy proactive-scheduler-portal --source . --platform managed --region ${region} --allow-unauthenticated --port 8000`);
+
+  try {
+    const res = await fetch(`/api/cloud/cloudrun/deploy?region=${region}`, { method: "POST" });
+    const data = await res.json();
+    appendTerminalOutput(`[CLOUD RUN OUTPUT]\n${data.stdout || data.stderr}`);
+  } catch (err) {
+    appendTerminalOutput(`[ERROR] Cloud Run request failed: ${err}`);
+  } finally {
+    btn.innerText = "Deploy Cloud Run";
+    btn.disabled = false;
+  }
+}
+
+function provisionGKECommand() {
+  const proj = document.getElementById("input-cloud-project").value.trim() || "PROJECT_ID";
+  const zone = document.getElementById("input-cloud-zone").value.trim() || "us-central1-a";
+  const cluster = document.getElementById("input-gke-cluster").value.trim() || "proactive-scheduler-gke";
+  const cmd = `gcloud container clusters create ${cluster} --zone ${zone} --project ${proj} --num-nodes 3 --machine-type e2-standard-4 --enable-ip-alias`;
+  document.getElementById("input-cloud-cmd").value = cmd;
+  appendTerminalOutput(`[PROVISION COMMAND READY]\n${cmd}\n\nClick 'Execute' or hit Enter to launch cluster creation on Google Cloud.`);
+}
+
+async function runQuickCommand(cmd) {
+  document.getElementById("input-cloud-cmd").value = cmd;
+  await executeCustomCommand();
+}
+
+async function executeCustomCommand() {
+  const input = document.getElementById("input-cloud-cmd");
+  const cmd = input.value.trim();
+  if (!cmd) return;
+
+  appendTerminalOutput(`$ ${cmd}`);
+  try {
+    const res = await fetch("/api/cloud/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: cmd }),
+    });
+    const data = await res.json();
+    appendTerminalOutput(data.output);
+  } catch (err) {
+    appendTerminalOutput(`[EXECUTION ERROR] ${err}`);
+  }
+}
+
+function appendTerminalOutput(text) {
+  const term = document.getElementById("cloud-terminal-output");
+  if (!term) return;
+  term.textContent += `\n\n${text}`;
+  term.scrollTop = term.scrollHeight;
 }
