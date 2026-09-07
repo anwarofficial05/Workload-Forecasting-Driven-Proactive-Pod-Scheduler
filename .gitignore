@@ -10,7 +10,7 @@ ENV/
 .venv/
 build/
 develop-eggs/
-dist/
+# dist/ (tracked for Netlify deployment)
 downloads/
 eggs/
 .eggs/
