@@ -1,5 +1,6 @@
 # Netlify Configuration for Proactive Kubernetes Pod Scheduler Portal
 [build]
+  command = "node scripts/build-netlify.js"
   publish = "dist"
 
 [[redirects]]
@@ -10,6 +11,7 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
+    X-Frame-Options = "SAMEORIGIN"
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
+
