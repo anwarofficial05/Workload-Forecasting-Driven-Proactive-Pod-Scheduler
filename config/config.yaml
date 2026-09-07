@@ -1,0 +1,115 @@
+# ==============================================================================
+# Workload-Forecasting Driven Proactive Pod Scheduling Configuration
+# ==============================================================================
+
+# General Cluster & System Settings
+cluster:
+  namespace: "proactive-system"
+  scheduler_name: "proactive-scheduler"
+  target_deployment: "workload-demo-app"
+
+# Module 1: Data Collection Configuration
+collection:
+  prometheus_url: "http://prometheus.proactive-system.svc.cluster.local:9090"
+  local_prometheus_url: "http://localhost:9090"
+  collection_interval: 10 # seconds
+  history_window_minutes: 60
+  storage_format: "csv" # csv or parquet
+  storage_dir: "data"
+  raw_data_file: "data/historical_workload_metrics.csv"
+  export_parquet: true
+  parquet_file: "data/historical_workload_metrics.parquet"
+
+# Module 2: Data Preprocessing
+preprocessing:
+  sequence_length: 5 # t-4, t-3, t-2, t-1, t
+  forecast_horizon: 1 # t+1 forecast
+  train_split_ratio: 0.70
+  val_split_ratio: 0.15
+  test_split_ratio: 0.15
+  scaler_type: "minmax" # minmax or standard
+  scalers_dir: "models/scalers"
+  lag_steps: [1, 2, 3]
+  rolling_windows: [3, 5]
+  feature_columns:
+    - "cpu_usage"
+    - "memory_usage"
+    - "request_rate"
+    - "response_latency"
+
+# Module 3: Workload Prediction Models
+prediction:
+  target_columns:
+    - "cpu_usage"
+    - "memory_usage"
+    - "request_rate"
+  primary_target: "cpu_usage"
+
+  # 3.1 LSTM Architecture & Training Parameters
+  lstm:
+    units: 50
+    dense_units: 25
+    dropout: 0.2
+    learning_rate: 0.001
+    epochs: 30
+    batch_size: 32
+    loss: "mse"
+    optimizer: "adam"
+    model_dir: "models/lstm"
+    model_path: "models/lstm/lstm_workload_model"
+
+  # 3.2 XGBoost Regressor Parameters
+  xgboost:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+    model_dir: "models/xgboost"
+    model_path: "models/xgboost/xgb_workload_model.json"
+
+  # 3.3 Weighted Ensemble Fusion
+  ensemble:
+    lstm_weight: 0.60
+    xgboost_weight: 0.40
+
+  # API Service
+  service:
+    host: "0.0.0.0"
+    port: 8000
+    debug: false
+
+# Module 4: Multi-Objective Node Ranking
+node_ranking:
+  # Weights must sum to 1.0
+  weights:
+    cpu_weight: 0.30
+    memory_weight: 0.25
+    latency_weight: 0.20
+    balance_weight: 0.25
+
+  # Constraints & Thresholds
+  min_cpu_headroom_percent: 5.0
+  min_memory_headroom_percent: 5.0
+  latency_penalty_factor: 1.2
+  overcommit_allowed: false
+
+# Module 5: Proactive Pod Scheduling
+scheduling:
+  binding_timeout_seconds: 15
+  polling_interval_seconds: 2
+  safe_fallback_node: "" # Auto-select lowest loaded node if ML unavailable
+  dry_run: false
+
+# Module 6: Monitoring & Service Level Objectives (SLO)
+monitoring:
+  slo_latency_ms: 500.0 # Requests > 500ms counted as SLO violation
+  metrics_port: 8001
+  export_interval_seconds: 5
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"

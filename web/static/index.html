@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kubernetes Proactive Scheduler — LSTM + XGBoost Ensemble</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <!-- Chart.js for real-time charting -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-container">
+      <div class="logo-badge">PROACTIVE K8S</div>
+      <div class="title-wrap">
+        <h1>Workload-Forecasting Proactive Pod Scheduler</h1>
+        <p>LSTM-XGBoost Ensemble with Multi-Objective Node Ranking</p>
+      </div>
+    </div>
+    <div class="system-status-pills">
+      <div class="pill" id="pill-k8s">
+        <span class="status-dot dot-green"></span> Checking Cluster...
+      </div>
+      <div class="pill" id="pill-models">
+        <span class="status-dot dot-blue"></span> Models Loaded
+      </div>
+      <div class="pill">
+        <span class="status-dot dot-purple"></span> SLO: &lt;500ms
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="tabs-nav">
+    <button class="tab-btn active" data-tab="tab-topology">Cluster Topology</button>
+    <button class="tab-btn" data-tab="tab-forecasting">Workload Forecasting</button>
+    <button class="tab-btn" data-tab="tab-ranking">Multi-Objective Ranking</button>
+    <button class="tab-btn" data-tab="tab-scheduler">Pod Scheduler Console</button>
+    <button class="tab-btn" data-tab="tab-traffic">Traffic Spike Simulator</button>
+    <button class="tab-btn" data-tab="tab-benchmarks">Benchmarks & Baselines</button>
+    <button class="tab-btn" data-tab="tab-plots">Publication Plots</button>
+    <button class="tab-btn" data-tab="tab-cloud">Cloud Connector (GKE)</button>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="content-area">
+
+    <!-- TAB 1: CLUSTER TOPOLOGY -->
+    <section id="tab-topology" class="tab-content active">
+      <div class="grid-cards">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Cluster CPU Load</span></div>
+          <div class="card-value" id="val-cpu-actual">--</div>
+          <p style="font-size: 0.8rem; color: #9ca3af;">Live aggregate cluster utilization</p>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Cluster Memory</span></div>
+          <div class="card-value" id="val-mem-actual">--</div>
+          <p style="font-size: 0.8rem; color: #9ca3af;">Resident memory pressure</p>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Incoming Request Rate</span></div>
+          <div class="card-value" id="val-req-rate">--</div>
+          <p style="font-size: 0.8rem; color: #9ca3af;">Throughput via Prometheus / App</p>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--accent-green);">
+          <div class="card-header"><span class="card-title">Optimal Placement Node</span></div>
+          <div class="card-value" id="val-selected-node" style="color: #10b981;">worker-2</div>
+          <p style="font-size: 0.8rem; color: #9ca3af;">Top-ranked by multi-objective engine</p>
+        </div>
+      </div>
+
+      <h2 style="margin-bottom: 1rem; font-size: 1.15rem; font-weight: 700;">Worker Node Headroom & Health</h2>
+      <div class="grid-cards" id="nodes-card-container">
+        <!-- Node cards dynamically inserted by app.js -->
+      </div>
+    </section>
+
+    <!-- TAB 2: HYBRID WORKLOAD FORECASTING -->
+    <section id="tab-forecasting" class="tab-content">
+      <div class="controls-panel">
+        <div class="control-group">
+          <label>LSTM Forecast Weight ($w_{\text{lstm}}$): <span id="lbl-lstm-weight">0.60</span></label>
+          <input type="range" id="range-lstm-weight" min="0.0" max="1.0" step="0.05" value="0.60" oninput="updateEnsembleWeights()" />
+        </div>
+        <div class="control-group">
+          <label>XGBoost Forecast Weight ($w_{\text{xgb}}$): <span id="lbl-xgb-weight">0.40</span></label>
+          <input type="range" id="range-xgb-weight" min="0.0" max="1.0" step="0.05" value="0.40" disabled />
+        </div>
+        <div style="display: flex; align-items: flex-end;">
+          <p style="font-size: 0.8rem; color: #9ca3af;">
+            Formula: $\hat{Y} = (w_{\text{lstm}} \cdot \hat{Y}_{\text{lstm}}) + (w_{\text{xgb}} \cdot \hat{Y}_{\text{xgb}})$
+          </p>
+        </div>
+      </div>
+
+      <div class="chart-container" style="height: 420px;">
+        <div class="chart-header">
+          <h3 style="font-size: 1.05rem; font-weight: 600;">Real-Time Workload Forecast vs Actual (CPU %)</h3>
+        </div>
+        <canvas id="forecastChart"></canvas>
+      </div>
+    </section>
+
+    <!-- TAB 3: MULTI-OBJECTIVE RANKING -->
+    <section id="tab-ranking" class="tab-content">
+      <div class="controls-panel">
+        <div class="control-group">
+          <label>CPU Headroom Weight: <span id="lbl-cpu-weight">0.30</span></label>
+          <input type="range" id="range-cpu-weight" min="0.05" max="0.80" step="0.05" value="0.30" oninput="updateRankingWeights()" />
+        </div>
+        <div class="control-group">
+          <label>Memory Headroom Weight: <span id="lbl-mem-weight">0.25</span></label>
+          <input type="range" id="range-mem-weight" min="0.05" max="0.80" step="0.05" value="0.25" oninput="updateRankingWeights()" />
+        </div>
+        <div class="control-group">
+          <label>Latency Score Weight: <span id="lbl-lat-weight">0.20</span></label>
+          <input type="range" id="range-lat-weight" min="0.05" max="0.80" step="0.05" value="0.20" oninput="updateRankingWeights()" />
+        </div>
+        <div class="control-group">
+          <label>Load Balance Weight: <span id="lbl-bal-weight">0.25</span></label>
+          <input type="range" id="range-bal-weight" min="0.05" max="0.80" step="0.05" value="0.25" oninput="updateRankingWeights()" />
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 2rem;">
+        <h3 style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem;">Candidate Worker Node Scoring Breakdown</h3>
+        <p style="font-size: 0.8rem; color: #9ca3af; margin-bottom: 1rem;">
+          Evaluating forecasted future workload headroom rather than reactive current utilization.
+        </p>
+        <div style="overflow-x: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Node Name</th>
+                <th>Current CPU</th>
+                <th>Predicted CPU</th>
+                <th>CPU Headroom</th>
+                <th>Memory Headroom</th>
+                <th>Latency Score</th>
+                <th>Balance Score</th>
+                <th>Final Composite Score</th>
+              </tr>
+            </thead>
+            <tbody id="ranking-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: POD SCHEDULER CONSOLE -->
+    <section id="tab-scheduler" class="tab-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700;">Proactive Pod Placement &amp; Binding Console</h2>
+          <p style="font-size: 0.85rem; color: #9ca3af;">
+            Executes real Kubernetes API Binding calls (<code style="color: #06b6d4;">POST /api/v1/.../binding</code>) based on the forecast.
+          </p>
+        </div>
+        <button class="btn" id="btn-dispatch-pod" onclick="dispatchProactivePod()">
+          Schedule New Pod (Proactive Binding)
+        </button>
+      </div>
+
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.8rem;">Live Scheduling Decision Log Stream</h3>
+        <div class="log-box" id="live-logs">
+          <div class="log-entry">[SYSTEM] Proactive Scheduling Controller initialized and ready.</div>
+          <div class="log-entry">[SCHEDULER] Watching pods with schedulerName: proactive-scheduler</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.8rem;">Active Pods Topology (<code style="color: #06b6d4;">kubectl get pods -o wide</code> equivalent)</h3>
+        <div style="overflow-x: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Pod Name</th>
+                <th>Status</th>
+                <th>Assigned Node</th>
+                <th>Pod IP</th>
+                <th>Scheduler</th>
+                <th>Age</th>
+              </tr>
+            </thead>
+            <tbody id="pods-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: TRAFFIC SPIKE SIMULATOR -->
+    <section id="tab-traffic" class="tab-content">
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">Workload Stress Test Presets</h3>
+        <p style="font-size: 0.85rem; color: #9ca3af; margin-bottom: 1.25rem;">
+          Trigger real-world workload patterns to demonstrate how proactive scheduling prevents SLO latency spikes.
+        </p>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          <button class="btn btn-danger" onclick="simulateTraffic('spike')">
+            Sudden Traffic Spike (Normal &rarr; 250 VUs)
+          </button>
+          <button class="btn" onclick="simulateTraffic('burst')">
+            Periodic Traffic Bursts
+          </button>
+          <button class="btn btn-secondary" onclick="simulateTraffic('gradual')">
+            Gradual Ramp-Up
+          </button>
+          <button class="btn btn-secondary" onclick="simulateTraffic('normal')">
+            Reset to Normal Baseline
+          </button>
+        </div>
+      </div>
+
+      <div class="chart-container" style="height: 380px;">
+        <div class="chart-header">
+          <h3 style="font-size: 1.05rem; font-weight: 600;">Response Latency Under Spike: Reactive HPA vs Proactive Scheduler</h3>
+        </div>
+        <canvas id="latencyChart"></canvas>
+      </div>
+    </section>
+
+    <!-- TAB 6: BENCHMARKS & BASELINES -->
+    <section id="tab-benchmarks" class="tab-content">
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">Experimental Benchmark Comparison</h3>
+        <div style="overflow-x: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Scheduling Strategy</th>
+                <th>Average Latency</th>
+                <th>P95 Latency</th>
+                <th>SLO Violations (&gt;500ms)</th>
+                <th>Cluster Load Variance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b style="color: #ef4444;">Reactive HPA Baseline</b></td>
+                <td>165.67 ms</td>
+                <td>734.99 ms</td>
+                <td><span style="color: #ef4444; font-weight: 700;">10.33%</span></td>
+                <td>2.5056</td>
+              </tr>
+              <tr>
+                <td><b>LSTM-Only Scheduler</b></td>
+                <td>94.58 ms</td>
+                <td>220.08 ms</td>
+                <td>0.00%</td>
+                <td>0.7893</td>
+              </tr>
+              <tr>
+                <td><b>Current-Load-Only Ranking</b></td>
+                <td>124.38 ms</td>
+                <td>306.42 ms</td>
+                <td>0.00%</td>
+                <td>6.4529</td>
+              </tr>
+              <tr style="background: rgba(6, 182, 212, 0.08);">
+                <td><b style="color: #10b981;">Proposed Proactive Scheduler</b></td>
+                <td><b style="color: #10b981;">61.85 ms</b></td>
+                <td><b style="color: #10b981;">111.18 ms</b></td>
+                <td><b style="color: #10b981;">0.00%</b></td>
+                <td><b style="color: #10b981;">0.1491</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-cards">
+        <div class="card">
+          <span class="card-title">ML Model Forecasting ($R^2$ Score)</span>
+          <div class="card-value" style="color: #06b6d4;">0.9816</div>
+          <p style="font-size: 0.8rem; color: #9ca3af;">Weighted Ensemble Fusion (LSTM + XGBoost)</p>
+        </div>
+        <div class="card">
+          <span class="card-title">Peak P95 Latency Reduction</span>
+          <div class="card-value" style="color: #10b981;">-84.8%</div>
+          <p style="font-size: 0.8rem; color: #9ca3af;">734.99ms (HPA) &rarr; 111.18ms (Proactive)</p>
+        </div>
+        <div class="card">
+          <span class="card-title">SLO Violations Eliminated</span>
+          <div class="card-value" style="color: #10b981;">0.00%</div>
+          <p style="font-size: 0.8rem; color: #9ca3af;">Zero requests exceeded 500ms under load</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 7: PUBLICATION PLOTS GALLERY -->
+    <section id="tab-plots" class="tab-content">
+      <div style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.25rem; font-weight: 700;">Research Publication Figures (Matplotlib)</h2>
+        <p style="font-size: 0.85rem; color: #9ca3af;">
+          High-resolution 300 DPI figures generated directly from actual experiment telemetry.
+        </p>
+      </div>
+      <div class="gallery-grid" id="plots-gallery">
+        <!-- Plots dynamically inserted by app.js -->
+      </div>
+    </section>
+
+    <!-- TAB 8: CLOUD CONNECTOR (GKE) -->
+    <section id="tab-cloud" class="tab-content">
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">Google Cloud Platform &amp; GKE Standard Deployment</h3>
+        <p style="font-size: 0.85rem; color: #9ca3af; margin-bottom: 1.5rem;">
+          Connect your Google Kubernetes Engine (GKE) Standard 3-node cluster to run the proactive scheduler in the cloud.
+        </p>
+
+        <div style="background: #030712; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.85rem; color: #93c5fd; margin-bottom: 1.5rem;">
+          # 1. Provision 3-Node GKE Standard Cluster<br/>
+          export GCP_PROJECT_ID="your-project-id"<br/>
+          bash kubernetes/gke/cluster-create.sh<br/><br/>
+          # 2. Deploy this unified container directly to Google Cloud Run for public web access<br/>
+          gcloud run deploy proactive-scheduler-web \<br/>
+          &nbsp;&nbsp;--source . \<br/>
+          &nbsp;&nbsp;--port 8000 \<br/>
+          &nbsp;&nbsp;--allow-unauthenticated \<br/>
+          &nbsp;&nbsp;--region us-central1
+        </div>
+
+        <button class="btn" onclick="alert('Cloud deployment script ready in kubernetes/gke/cluster-create.sh and Dockerfile!')">
+          View Cloud Deployment Manifests
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    Final Year Engineering Project — Workload-Forecasting Driven Proactive Pod Scheduling for Kubernetes Clusters using LSTM-XGBoost Ensemble With Multi-Objective Node Ranking
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-config
+  namespace: proactive-system
+data:
+  config.yaml: |
+    cluster:
+      namespace: "proactive-system"
+      scheduler_name: "proactive-scheduler"
+    node_ranking:
+      weights:
+        cpu_weight: 0.30
+        memory_weight: 0.25
+        latency_weight: 0.20
+        balance_weight: 0.25
+    monitoring:
+      slo_latency_ms: 500.0

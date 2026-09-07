@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: workload-demo-app
+  namespace: proactive-system
+spec:
+  type: NodePort
+  selector:
+    app: workload-demo-app
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forecast-service
+  namespace: proactive-system
+spec:
+  type: ClusterIP
+  selector:
+    app: forecast-service
+  ports:
+    - name: api
+      port: 8000
+      targetPort: 8000
+    - name: metrics
+      port: 8001
+      targetPort: 8001

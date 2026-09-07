@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data & Models
+data/*.csv
+data/*.parquet
+!data/sample_workload_metrics.csv
+models/lstm/*.keras
+models/lstm/*.h5
+models/xgboost/*.json
+models/scalers/*.joblib
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment & Credentials
+.env
+*.pem
+*.key
+
+# Kubernetes / Local Cluster
+*.kubeconfig
+minikube-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Evaluation outputs
+evaluation/results/*.json
+evaluation/plots/*.png
+!evaluation/plots/sample_*.png

@@ -1,0 +1,150 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "1. CPU Usage (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)", "legendFormat": "Cluster Node CPU %" },
+        { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"proactive-system\"}[1m])) * 100", "legendFormat": "App Pod CPU %" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "2. Memory Usage (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        { "expr": "((sum(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)) * 100)", "legendFormat": "Cluster Memory %" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "3. Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total[1m]))", "legendFormat": "Incoming Request Rate (req/s)" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "4. Response Latency (P95 ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 7 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P95 Latency (ms)" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "5. Pod Count",
+      "type": "stat",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 7 },
+      "targets": [
+        { "expr": "count(kube_pod_info{namespace=\"proactive-system\"})", "legendFormat": "Active Pods" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "6. Node Utilization Distribution",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 7 },
+      "targets": [
+        { "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)", "legendFormat": "{{instance}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "7. Actual vs LSTM Forecast (CPU %)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 14 },
+      "targets": [
+        { "expr": "cluster_actual_cpu_percent", "legendFormat": "Actual CPU %" },
+        { "expr": "workload_prediction_cpu_ratio{model=\"lstm\"} * 100", "legendFormat": "LSTM Forecast %" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "8. Actual vs XGBoost Forecast (CPU %)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 14 },
+      "targets": [
+        { "expr": "cluster_actual_cpu_percent", "legendFormat": "Actual CPU %" },
+        { "expr": "workload_prediction_cpu_ratio{model=\"xgboost\"} * 100", "legendFormat": "XGBoost Forecast %" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "9. Actual vs Ensemble Forecast (CPU %)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 14 },
+      "targets": [
+        { "expr": "cluster_actual_cpu_percent", "legendFormat": "Actual CPU %" },
+        { "expr": "workload_prediction_cpu_ratio{model=\"ensemble\"} * 100", "legendFormat": "Ensemble Forecast %" }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "10. Multi-Objective Node Ranking Scores",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 21 },
+      "targets": [
+        { "expr": "node_ranking_score", "legendFormat": "{{node_name}}" }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "11. Selected Node Placements",
+      "type": "bargauge",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 21 },
+      "targets": [
+        { "expr": "sum by (node_name) (proactive_scheduler_node_selected_total)", "legendFormat": "{{node_name}}" }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "12. SLO Violations (>500ms)",
+      "type": "stat",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 21 },
+      "targets": [
+        { "expr": "cluster_slo_violations_total", "legendFormat": "Total SLO Violations" }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "13. Resource Utilization Summary",
+      "type": "gauge",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 },
+      "targets": [
+        { "expr": "avg(cluster_actual_cpu_percent)", "legendFormat": "Cluster Avg CPU %" },
+        { "expr": "avg(cluster_actual_memory_percent)", "legendFormat": "Cluster Avg Mem %" }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "14. Forecast Absolute Error (|Actual - Pred|)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 },
+      "targets": [
+        { "expr": "workload_forecast_absolute_error{metric=\"cpu\"}", "legendFormat": "{{model}} CPU Error" }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["kubernetes", "proactive-scheduling", "lstm", "xgboost", "ensemble"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "Proactive Pod Scheduling with LSTM-XGBoost Ensemble",
+  "version": 1
+}

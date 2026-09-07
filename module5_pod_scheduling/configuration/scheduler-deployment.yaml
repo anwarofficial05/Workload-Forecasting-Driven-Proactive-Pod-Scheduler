@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proactive-scheduler
+  namespace: proactive-system
+  labels:
+    app: proactive-scheduler
+    component: scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proactive-scheduler
+  template:
+    metadata:
+      labels:
+        app: proactive-scheduler
+    spec:
+      serviceAccountName: proactive-scheduler-sa
+      containers:
+        - name: proactive-scheduler
+          image: proactive-scheduler:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - "python"
+            - "-u"
+            - "module5_pod_scheduling/scheduler/controller.py"
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: SCHEDULER_NAME
+              value: "proactive-scheduler"
+            - name: K8S_NAMESPACE
+              value: "proactive-system"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
