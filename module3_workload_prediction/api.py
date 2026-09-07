@@ -104,6 +104,14 @@ def serve_app_js():
     return FileResponse(os.path.join(STATIC_DIR, "app.js"))
 
 
+@app.get("/Project_Review_Demonstration_Guide.pdf")
+def serve_guide_pdf():
+    pdf_path = os.path.join(PROJECT_ROOT, "Project_Review_Demonstration_Guide.pdf")
+    if os.path.exists(pdf_path):
+        return FileResponse(pdf_path, media_type="application/pdf", filename="Project_Review_Demonstration_Guide.pdf")
+    return Response(status_code=404)
+
+
 @app.get("/plots/{filename}")
 def serve_plot(filename: str):
     """Serve generated evaluation plots."""

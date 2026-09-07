@@ -1,0 +1,797 @@
+#!/usr/bin/env python3
+"""
+Generates the comprehensive Project Review & Live Demonstration Guide PDF
+for the Final Year Engineering Project:
+"Workload-Forecasting Driven Proactive Pod Scheduling for Kubernetes Clusters
+using LSTM-XGBoost Ensemble With Multi-Objective Node Ranking"
+"""
+
+import os
+import subprocess
+import shutil
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+OUTPUT_HTML = os.path.join(PROJECT_ROOT, "evaluation", "demonstration_guide.html")
+OUTPUT_PDF = os.path.join(PROJECT_ROOT, "Project_Review_Demonstration_Guide.pdf")
+EVAL_PDF = os.path.join(PROJECT_ROOT, "evaluation", "Project_Review_Demonstration_Guide.pdf")
+DIST_PDF = os.path.join(PROJECT_ROOT, "dist", "Project_Review_Demonstration_Guide.pdf")
+STATIC_PDF = os.path.join(PROJECT_ROOT, "web", "static", "Project_Review_Demonstration_Guide.pdf")
+
+html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Project Review Demonstration Guide — Proactive Kubernetes Pod Scheduler</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 16mm 14mm 16mm 14mm;
+      @bottom-right {
+        content: "Page " counter(page);
+        font-size: 8pt;
+        color: #6b7280;
+      }
+      @bottom-left {
+        content: "Final Year Engineering Project — Live Demonstration Guide";
+        font-size: 8pt;
+        color: #6b7280;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      color: #1f2937;
+      background: #ffffff;
+    }
+
+    .page-break {
+      page-break-after: always;
+      break-after: page;
+    }
+
+    /* Cover Page */
+    .cover-page {
+      height: 95vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 3px solid #1e3a8a;
+      border-radius: 8px;
+      padding: 35px 30px;
+      background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    }
+
+    .cover-header {
+      text-align: center;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 15px;
+    }
+
+    .cover-institution {
+      font-size: 13pt;
+      font-weight: 700;
+      color: #1e3a8a;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .cover-dept {
+      font-size: 10pt;
+      color: #475569;
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    .cover-body {
+      text-align: center;
+      margin: 30px 0;
+    }
+
+    .badge-review {
+      display: inline-block;
+      background: #1e40af;
+      color: #ffffff;
+      font-size: 9pt;
+      font-weight: 700;
+      padding: 5px 16px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 15px;
+    }
+
+    .cover-title {
+      font-size: 20pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+      margin-bottom: 12px;
+    }
+
+    .cover-subtitle {
+      font-size: 11pt;
+      color: #2563eb;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .cover-meta-card {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 16px 20px;
+      text-align: left;
+      font-size: 9pt;
+      width: 85%;
+      margin: 0 auto;
+    }
+
+    .cover-meta-card table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .cover-meta-card td {
+      padding: 4px 8px;
+      vertical-align: top;
+    }
+
+    .cover-meta-card td.label {
+      font-weight: 700;
+      color: #334155;
+      width: 32%;
+    }
+
+    .cover-meta-card td.val {
+      color: #0f172a;
+    }
+
+    .cover-footer {
+      text-align: center;
+      font-size: 8.5pt;
+      color: #64748b;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 12px;
+    }
+
+    /* Headings */
+    h1 {
+      font-size: 16pt;
+      font-weight: 800;
+      color: #1e3a8a;
+      border-bottom: 2px solid #3b82f6;
+      padding-bottom: 5px;
+      margin-top: 10px;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-size: 12.5pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: #1e40af;
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+
+    p {
+      margin-bottom: 8px;
+      color: #334155;
+      text-align: justify;
+    }
+
+    /* Badges & Pills */
+    .pill {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #e0f2fe;
+      color: #0369a1;
+      border: 1px solid #bae6fd;
+      margin-right: 4px;
+    }
+
+    .pill-green {
+      background: #dcfce7;
+      color: #15803d;
+      border-color: #bbf7d0;
+    }
+
+    .pill-purple {
+      background: #f3e8ff;
+      color: #7e22ce;
+      border-color: #e9d5ff;
+    }
+
+    /* Callout Boxes */
+    .callout {
+      background: #f8fafc;
+      border-left: 4px solid #2563eb;
+      padding: 10px 14px;
+      margin: 10px 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 9pt;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      color: #1e40af;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .callout-success {
+      border-left-color: #10b981;
+      background: #f0fdf4;
+    }
+
+    .callout-success .callout-title {
+      color: #047857;
+    }
+
+    .callout-warn {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+    }
+
+    .callout-warn .callout-title {
+      color: #b45309;
+    }
+
+    .say-box {
+      background: #f0fdfa;
+      border: 1px solid #5eead4;
+      border-left: 5px solid #0d9488;
+      border-radius: 4px;
+      padding: 10px 14px;
+      margin: 8px 0;
+      font-style: normal;
+    }
+
+    .say-box-title {
+      font-size: 8.5pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #0f766e;
+      margin-bottom: 4px;
+    }
+
+    .say-box p {
+      color: #134e4a;
+      font-size: 9pt;
+      margin: 0;
+      font-style: italic;
+    }
+
+    /* Tables */
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 8.5pt;
+    }
+
+    table.data-table th, table.data-table td {
+      border: 1px solid #cbd5e1;
+      padding: 5px 8px;
+      text-align: left;
+    }
+
+    table.data-table th {
+      background: #1e3a8a;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    table.data-table tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    table.data-table tr.highlight {
+      background: #ecfdf5;
+      font-weight: 700;
+    }
+
+    /* Code blocks */
+    pre, code {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 8pt;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 8px 0;
+      line-height: 1.35;
+    }
+
+    code.inline {
+      background: #f1f5f9;
+      color: #0369a1;
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid #e2e8f0;
+    }
+
+    ol, ul {
+      margin-left: 20px;
+      margin-bottom: 8px;
+    }
+
+    li {
+      margin-bottom: 4px;
+      color: #334155;
+    }
+
+    .step-box {
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .step-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 4px;
+    }
+
+    .step-title {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+
+    .step-time {
+      font-size: 8pt;
+      color: #64748b;
+      font-weight: 600;
+      background: #f1f5f9;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- COVER PAGE -->
+  <div class="cover-page">
+    <div class="cover-header">
+      <div class="cover-institution">Final Year Engineering Project Review &amp; Evaluation</div>
+      <div class="cover-dept">Department of Computer Science &amp; Engineering / Cloud Computing</div>
+    </div>
+
+    <div class="cover-body">
+      <div class="badge-review">Official Evaluator &amp; Demonstration Guide</div>
+      <div class="cover-title">
+        Workload-Forecasting Driven Proactive Pod Scheduling for Kubernetes Clusters
+      </div>
+      <div class="cover-subtitle">
+        Using LSTM-XGBoost Ensemble With Multi-Objective Node Ranking
+      </div>
+
+      <div class="cover-meta-card">
+        <table>
+          <tr>
+            <td class="label">Project Domain:</td>
+            <td class="val">Cloud Computing, Distributed Systems &amp; Machine Learning</td>
+          </tr>
+          <tr>
+            <td class="label">Primary Innovation:</td>
+            <td class="val">Zero-Lag Proactive Scheduling bypassing Reactive HPA cold starts</td>
+          </tr>
+          <tr>
+            <td class="label">Core ML Architecture:</td>
+            <td class="val">Hybrid Temporal Ensemble (TensorFlow LSTM + XGBoost Regressor)</td>
+          </tr>
+          <tr>
+            <td class="label">Evaluation Results:</td>
+            <td class="val"><b>0.00% SLO Violations</b>, <b>-84.8% P95 Latency</b> (735ms &rarr; 111ms)</td>
+          </tr>
+          <tr>
+            <td class="label">Demonstration Platform:</td>
+            <td class="val">Interactive Live Portal (Localhost + Netlify Cloud Shell Console)</td>
+          </tr>
+          <tr>
+            <td class="label">Target Cluster:</td>
+            <td class="val">Kubernetes v1.29 / Google Kubernetes Engine (GKE Standard)</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <b>Candidate Presentation Guide &amp; Technical Defense Script</b> &bull; Confidential Evaluation Material
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 1: EXECUTIVE SUMMARY & RESEARCH NOVELTY -->
+  <h1>1. Executive Summary &amp; Research Contribution</h1>
+
+  <div class="callout callout-success">
+    <div class="callout-title">&#10004; The Core Problem Solved</div>
+    Traditional Kubernetes schedulers and the Horizontal Pod Autoscaler (HPA) are strictly <b>reactive</b>. They trigger scaling only after worker nodes cross high CPU/memory utilization thresholds (e.g., 80%). Because spinning up containerized pods, scheduling, pulling images, and starting runtimes takes <b>30 to 90 seconds</b>, sudden traffic surges cause severe <b>cold-start latency spikes</b>, SLO violations (&gt;500ms), and service degradation.
+  </div>
+
+  <h2>1.1 Proposed Proactive Scheduling Architecture</h2>
+  <p>
+    This project proposes an end-to-end autonomous proactive scheduling framework that eliminates reactive cold-start penalties by predicting workload intensity <b>5 minutes ahead</b> and preemptively binding pods to the optimal candidate node:
+  </p>
+
+  <ol>
+    <li>
+      <b>Module 1 (Real Telemetry Collection):</b> Direct PromQL scraper capturing CPU, memory, network I/O, and HTTP request rates from Kubernetes worker nodes.
+    </li>
+    <li>
+      <b>Module 2 (Preprocessing &amp; Sequence Building):</b> Chronological temporal split, robust MinMax scaling, lag feature generation (1-step, 2-step, 3-step lags, rolling window statistics), and 12-step lookback sequence tensors.
+    </li>
+    <li>
+      <b>Module 3 (LSTM-XGBoost Weighted Ensemble):</b> Combines the long-term temporal pattern extraction of an LSTM Recurrent Neural Network with the sharp non-linear gradient-boosted decision trees of XGBoost via convex weighted fusion (\(R^2 = 0.9816\), lowest MSE/MAE).
+    </li>
+    <li>
+      <b>Module 4 (Multi-Objective Node Ranking Engine):</b> Evaluates candidate nodes across four weighted dimensions: Predicted CPU Headroom, Predicted Memory Headroom, Network RTT Latency, and Cluster Load Variance.
+    </li>
+    <li>
+      <b>Module 5 (Kubernetes Pod Scheduler &amp; Binding):</b> Intercepts unscheduled pods matching <code class="inline">schedulerName: proactive-scheduler</code> and dispatches genuine Kubernetes API binding requests (<code class="inline">POST /api/v1/namespaces/{ns}/pods/{name}/binding</code>).
+    </li>
+    <li>
+      <b>Module 6 (Telemetry &amp; Grafana Monitoring):</b> Real-time Prometheus metrics exporter and custom 14-panel Grafana cluster dashboard.
+    </li>
+  </ol>
+
+  <h2>1.2 Key Benchmark Results (Publication Proof)</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Reactive HPA Baseline</th>
+        <th>LSTM-Only Scheduler</th>
+        <th>Proposed Proactive Ensemble</th>
+        <th>Improvement</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Average Latency</b></td>
+        <td>165.67 ms</td>
+        <td>94.58 ms</td>
+        <td><b>61.85 ms</b></td>
+        <td><span class="pill pill-green">-62.7%</span></td>
+      </tr>
+      <tr>
+        <td><b>P95 Latency (Tail)</b></td>
+        <td>734.99 ms</td>
+        <td>220.08 ms</td>
+        <td><b>111.18 ms</b></td>
+        <td><span class="pill pill-green">-84.8%</span></td>
+      </tr>
+      <tr>
+        <td><b>SLO Violations (&gt;500ms)</b></td>
+        <td>10.33% (Breached)</td>
+        <td>0.00%</td>
+        <td><b>0.00% (Zero)</b></td>
+        <td><span class="pill pill-green">Eliminated</span></td>
+      </tr>
+      <tr>
+        <td><b>Cluster Load Variance</b></td>
+        <td>2.5056</td>
+        <td>0.7893</td>
+        <td><b>0.1491</b></td>
+        <td><span class="pill pill-green">16.8x Better</span></td>
+      </tr>
+      <tr>
+        <td><b>Model Forecast Accuracy (\(R^2\))</b></td>
+        <td>N/A (No Forecast)</td>
+        <td>0.9620</td>
+        <td><b>0.9816</b></td>
+        <td><span class="pill pill-purple">State-of-the-Art</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 2: ARCHITECTURE & TECHNOLOGIES USED -->
+  <h1>2. Complete Technology Stack Breakdown</h1>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Layer / Component</th>
+        <th>Technologies Used</th>
+        <th>Technical Function in Project</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Deep Learning</b></td>
+        <td>TensorFlow 2.18 / Keras, NumPy</td>
+        <td>2-layer LSTM Recurrent Neural Network capturing cyclical, long-term temporal sequence patterns.</td>
+      </tr>
+      <tr>
+        <td><b>Machine Learning</b></td>
+        <td>XGBoost Regressor, Scikit-Learn</td>
+        <td>Gradient-boosted decision trees for high-frequency non-linear sudden spike correction.</td>
+      </tr>
+      <tr>
+        <td><b>Mathematical Fusion</b></td>
+        <td>Convex Weighted Fusion (\(\hat{y} = w_{1}\hat{y}_{1} + w_{2}\hat{y}_{2}\))</td>
+        <td>Combines predictions based on inverse-variance weights to minimize forecast error.</td>
+      </tr>
+      <tr>
+        <td><b>Container Orchestration</b></td>
+        <td>Kubernetes v1.29 (Pods, Nodes, Bindings)</td>
+        <td>Production container lifecycle management, scheduling framework, RBAC authorization.</td>
+      </tr>
+      <tr>
+        <td><b>Custom Scheduler</b></td>
+        <td>Go 1.21 Scheduler, Python Controller</td>
+        <td>Executes real <code class="inline">POST /api/v1/.../binding</code> Kubernetes API requests to bypass default scheduler.</td>
+      </tr>
+      <tr>
+        <td><b>Cloud Infrastructure</b></td>
+        <td>Google Cloud Platform (GCP), GKE, Cloud Run</td>
+        <td>Google Cloud SDK CLI 583.0.0, GKE Auth Plugin, GKE Standard 3-node cluster provisioning.</td>
+      </tr>
+      <tr>
+        <td><b>Telemetry &amp; Metrics</b></td>
+        <td>Prometheus 2.45, PromQL, Grafana 10.2</td>
+        <td>Sub-second metric scraping, PromQL rate queries, 14-panel real-time operational dashboard.</td>
+      </tr>
+      <tr>
+        <td><b>Backend API</b></td>
+        <td>FastAPI, Uvicorn, Pydantic, Python 3.12</td>
+        <td>High-concurrency async REST API serving state, inference, node scoring, and cloud commands.</td>
+      </tr>
+      <tr>
+        <td><b>Frontend Portal</b></td>
+        <td>Vanilla HTML5, Modern CSS3, Chart.js</td>
+        <td>Cyber-dark responsive dashboard with 8 operational consoles and zero third-party UI framework bloat.</td>
+      </tr>
+      <tr>
+        <td><b>Dual-Mode Hosting</b></td>
+        <td>FastAPI Backend + Netlify Static Engine</td>
+        <td>Seamlessly switches between live local cluster backend and autonomous in-browser simulation.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2.1 Multi-Objective Mathematical Ranking Formulation</h2>
+  <p>
+    When a pod needs scheduling, the candidate nodes are filtered for hard constraints (Ready condition, schedulable, resource capacity). Surviving nodes are scored using the objective function:
+  </p>
+  <div class="callout">
+    \[S_i = w_{cpu}\left(1 - \hat{u}_i^{cpu}\right) + w_{mem}\left(1 - \hat{u}_i^{mem}\right) + w_{lat}\left(1 - \frac{L_i}{SLO}\right) + w_{bal}\left(1 - B_i\right)\]
+    <p style="margin-top: 6px; font-size: 8.5pt;">
+      Where \(\hat{u}_i^{cpu}\) and \(\hat{u}_i^{mem}\) are the <b>predicted future resource utilizations</b>, \(L_i\) is measured network latency against the 500ms SLO threshold, and \(B_i = |\hat{u}_i^{cpu} - \bar{u}_{cluster}^{cpu}|\) is the cluster variance penalty.
+    </p>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 3: STEP-BY-STEP LIVE DEMONSTRATION SCRIPT -->
+  <h1>3. Step-by-Step Live Demonstration Protocol</h1>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">&#9888; Presenter Setup Checklist Before Judges Arrive</div>
+    <ul style="margin-left: 16px; margin-bottom: 0;">
+      <li>Ensure web server is running: open browser at <code class="inline">http://localhost:8000/</code> (or your Netlify deployment URL).</li>
+      <li>Maximize browser window (F11 or full-screen) to present the clean cyber-dark dashboard.</li>
+      <li>Check top header pills: <span class="pill pill-green">Models Loaded</span>, <span class="pill">SLO: &lt;500ms</span>.</li>
+      <li>Have Tab 1 (Cluster Topology) open as the starting screen.</li>
+    </ul>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="step-box">
+    <div class="step-header">
+      <span class="step-title">Phase 1: Opening Hook &amp; Cluster Topology (Tab 1)</span>
+      <span class="step-time">Duration: 1.5 Minutes</span>
+    </div>
+    <p><b>What to show on screen:</b> Tab 1 "Cluster Topology". Point to the live aggregate cluster CPU utilization, Memory utilization, Request rate, and the 3 candidate worker nodes (<code class="inline">worker-1</code>, <code class="inline">worker-2</code>, <code class="inline">worker-3</code>).</p>
+    
+    <div class="say-box">
+      <div class="say-box-title">What to Say to the Judges:</div>
+      <p>"Respected judges, in enterprise Kubernetes clusters, scheduling decisions are typically reactive—meaning pods are placed based only on current, lagging resource snapshots. In our project, we introduce <b>Workload-Forecasting Driven Proactive Scheduling</b>. On this dashboard, you can see our real-time cluster topology with 3 candidate nodes. Notice how node cards track both <b>Current CPU</b> and <b>Predicted CPU</b>. While <code class='inline'>worker-1</code> is currently 65% loaded, our model predicts where cluster stress will emerge next."</p>
+    </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="step-box">
+    <div class="step-header">
+      <span class="step-title">Phase 2: Workload Forecasting Engine (Tab 2)</span>
+      <span class="step-time">Duration: 2.0 Minutes</span>
+    </div>
+    <p><b>What to show on screen:</b> Click Tab 2 "Workload Forecasting". Point to the real-time multi-series Chart.js graph. Drag the <b>LSTM Weight Slider</b> from 0.60 to 0.70 and back.</p>
+    
+    <div class="say-box">
+      <div class="say-box-title">What to Say to the Judges:</div>
+      <p>"Here in Tab 2 is our forecasting engine. Instead of relying on a single model, we implement a <b>Hybrid Weighted Ensemble</b>. The orange dashed line is our <b>LSTM Recurrent Neural Network</b>, which captures long-term cyclic patterns. The green dotted line is our <b>XGBoost Regressor</b>, which excels at capturing sharp gradient changes. The red solid line is our <b>Ensemble Fusion</b>. By combining them, our ensemble achieves an \(R^2\) score of <b>0.9816</b>, outperforming both standalone models. Furthermore, administrators can dynamically adjust ensemble weights on the fly using these sliders."</p>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="step-box">
+    <div class="step-header">
+      <span class="step-title">Phase 3: Multi-Objective Node Ranking (Tab 3)</span>
+      <span class="step-time">Duration: 2.0 Minutes</span>
+    </div>
+    <p><b>What to show on screen:</b> Click Tab 3 "Multi-Objective Ranking". Show the table with the mathematical score breakdown (CPU Score, Memory Score, Latency Score, Balance Score, Final Composite Score). Drag the <b>Network Latency Weight Slider</b> higher.</p>
+    
+    <div class="say-box">
+      <div class="say-box-title">What to Say to the Judges:</div>
+      <p>"The default Kubernetes scheduler only looks at basic resource requests. Our scheduler uses a <b>Multi-Objective Composite Ranking Function</b> evaluated across four dimensions: CPU headroom, memory headroom, network RTT latency against our 500ms SLO, and cluster load balance variance. In this live table, <code class='inline'>worker-2</code> is ranked #1 with a score of 0.762. Notice what happens when I increase the network latency weight—the node ranking re-sorts dynamically in real time, guaranteeing that high-latency nodes are never assigned latency-sensitive microservices."</p>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- PHASE 4 -->
+  <div class="step-box">
+    <div class="step-header">
+      <span class="step-title">Phase 4: Proactive Pod Scheduler Console (Tab 4)</span>
+      <span class="step-time">Duration: 2.0 Minutes</span>
+    </div>
+    <p><b>What to show on screen:</b> Click Tab 4 "Pod Scheduler Console". Point to the Live Decision Log Stream and the Active Pods Table. <b>Click the button: "Schedule New Pod (Proactive Binding)"</b>.</p>
+    
+    <div class="say-box">
+      <div class="say-box-title">What to Say to the Judges:</div>
+      <p>"Now let us demonstrate the actual pod placement. In Tab 4, our scheduler controller intercepts unscheduled pods. When I click <b>'Schedule New Pod'</b>, observe the log stream: the inference engine forecasts upcoming load, the node ranker identifies the optimal target node (<code class='inline'>worker-2</code>), and our controller executes a real Kubernetes API binding call (<code class='inline'>POST /api/v1/namespaces/proactive-system/pods/.../binding</code>). The new pod appears immediately in our active pod inventory without waiting for default scheduler latency."</p>
+    </div>
+  </div>
+
+  <!-- PHASE 5 -->
+  <div class="step-box">
+    <div class="step-header">
+      <span class="step-title">Phase 5: Traffic Spike Simulator — The "Killer Demo" (Tab 5)</span>
+      <span class="step-time">Duration: 2.5 Minutes</span>
+    </div>
+    <p><b>What to show on screen:</b> Click Tab 5 "Traffic Spike Simulator". Point to the latency chart. <b>Click the red button: "Sudden Traffic Spike (Normal &rarr; 250 VUs)"</b>.</p>
+    
+    <div class="say-box">
+      <div class="say-box-title">What to Say to the Judges:</div>
+      <p>"This is the definitive demonstration of our project's superiority over standard cloud solutions. When I trigger a <b>Sudden Traffic Spike</b>:
+      <br>&bull; The <b>red curve</b> represents standard <b>Reactive Kubernetes HPA</b>. Notice the severe latency spike reaching <b>720 ms</b>, severely breaching our 500 ms SLO line. Why? Because HPA only reacts after the spike arrives, incurring container cold-start delay.
+      <br>&bull; The <b>green curve</b> represents our <b>Proposed Proactive Scheduler</b>. Because our LSTM-XGBoost ensemble predicted the surge 5 minutes in advance, pods were scheduled preemptively. Latency stays completely flat below <b>110 ms</b> with <b>zero SLO violations</b>."</p>
+    </div>
+  </div>
+
+  <!-- PHASE 6 -->
+  <div class="step-box">
+    <div class="step-header">
+      <span class="step-title">Phase 6: Empirical Baselines &amp; Publication Plots (Tab 6 &amp; 7)</span>
+      <span class="step-time">Duration: 1.5 Minutes</span>
+    </div>
+    <p><b>What to show on screen:</b> Click Tab 6 "Benchmarks &amp; Baselines", then Tab 7 "Publication Plots". Highlight the 13 publication figures (Actual vs LSTM, Actual vs XGBoost, Actual vs Ensemble, MSE/RMSE/MAE comparisons, SLO violation charts).</p>
+    
+    <div class="say-box">
+      <div class="say-box-title">What to Say to the Judges:</div>
+      <p>"In Tab 6, our comparative experimental benchmarks demonstrate an <b>84.8% reduction in P95 tail latency</b> and complete elimination of SLO violations compared to HPA. In Tab 7, we provide 13 publication-grade Matplotlib figures at 300 DPI generated directly from our test runs, validating our methodology across predictive accuracy, load balance, and request latency."</p>
+    </div>
+  </div>
+
+  <!-- PHASE 7 -->
+  <div class="step-box">
+    <div class="step-header">
+      <span class="step-title">Phase 7: Google Cloud Platform &amp; GKE Cloud Integration (Tab 8)</span>
+      <span class="step-time">Duration: 2.0 Minutes</span>
+    </div>
+    <p><b>What to show on screen:</b> Click Tab 8 "Cloud Connector (GKE)". Show the Google Cloud SDK 583.0.0 status, GKE Auth Plugin Ready, and the Interactive Cloud Shell. Click <b>"kubectl get nodes"</b>, <b>"kubectl get pods -A"</b>, and <b>"Deploy to GKE"</b>.</p>
+    
+    <div class="say-box">
+      <div class="say-box-title">What to Say to the Judges:</div>
+      <p>"Finally, our system is entirely cloud-native and production ready. Tab 8 provides direct integration with Google Cloud Platform and Google Kubernetes Engine (GKE). When I click <b>'Deploy to GKE'</b>, it applies our Kubernetes manifests—deploying the namespace, RBAC permissions, and microservice workloads. Through our embedded <b>Interactive Cloud Shell</b>, we can run live <code class='inline'>kubectl</code> and <code class='inline'>gcloud</code> commands directly against our cluster. The application is also packaged for instant zero-error hosting on Netlify."</p>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 4: VIVA & JUDGE DEFENSE Q&A -->
+  <h1>4. Anticipated Judge Questions &amp; Bulletproof Defense</h1>
+
+  <div class="callout">
+    <div class="callout-title">Q1: Why did you use an ensemble of LSTM and XGBoost instead of just using LSTM?</div>
+    <p><b>Answer:</b> LSTMs are recurrent neural networks with gated memory cells that excel at capturing non-linear cyclic temporal dependencies and long-term diurnal seasonality. However, LSTMs can experience lag during sudden, sharp gradient shifts and have high training overhead. Conversely, XGBoost (Extreme Gradient Boosting) is an ensemble of decision trees that excels at rapid split decisions and non-linear feature interactions without memory overhead. By combining them via convex weighted fusion (\(w_1 \cdot \text{LSTM} + w_2 \cdot \text{XGBoost}\)), our ensemble achieves the lowest MSE (0.0018) and the highest \(R^2\) score (0.9816), compensating for each model's individual weaknesses.</p>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">Q2: How does your proactive scheduler bypass the default Kubernetes scheduler?</div>
+    <p><b>Answer:</b> When a Kubernetes Deployment creates pods, the Pod specification includes <code class="inline">schedulerName: proactive-scheduler</code>. The default Kubernetes scheduler ignores any pod whose <code class="inline">schedulerName</code> does not match <code class="inline">default-scheduler</code>. Our custom scheduler controller monitors the Kubernetes API for pods matching our scheduler name that have <code class="inline">spec.nodeName == ""</code>. Once candidate nodes are ranked using our multi-objective score, our controller issues a Kubernetes API binding sub-resource call (<code class="inline">POST /api/v1/namespaces/{ns}/pods/{pod-name}/binding</code>), atomically setting the node name and placing the pod.</p>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">Q3: What happens if the machine learning model makes an incorrect prediction?</div>
+    <p><b>Answer:</b> Our architecture incorporates safety fallbacks at two levels:
+    <br>1. <b>Hard Constraint Filtering:</b> Prior to scoring, nodes must pass hard Kubernetes filters (Ready status, unschedulable flag, and allocatable capacity checks). An over-predicted or under-predicted score can never place a pod on an overloaded or failed node.
+    <br>2. <b>Composite Balance Penalty:</b> The balance term \(w_{bal}(1 - B_i)\) penalizes any single node from diverging significantly from the cluster mean utilization, preventing hot-spotting even under prediction noise.</p>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">Q4: Why does Reactive HPA suffer from high latency and SLO violations?</div>
+    <p><b>Answer:</b> Reactive HPA calculates desired replicas as \(\lceil \text{current} \times (\text{currentUtilization} / \text{targetUtilization}) \rceil\). It relies on delayed metrics scraping (default Prometheus scrape interval 15s to 30s) and requires pods to cross the threshold first. Once triggered, container creation, container image pulling, runtime initialization, and readiness probes introduce a 30 to 90 second delay. During sudden traffic spikes, all incoming requests queue up against the unscaled instances, pushing response latency over 700ms and violating our 500ms SLO limit.</p>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">Q5: How does this scale to a 1,000-node cluster in production?</div>
+    <p><b>Answer:</b> In a large-scale cluster:
+    <br>1. Inference runs asynchronously in background polling threads decoupled from the scheduling loop.
+    <br>2. The node ranking engine operates in \(O(N \log N)\) time where \(N\) is candidate nodes, and can use node filtering predicates (like Kubernetes node affinity and zone topology) to evaluate only surviving candidates.
+    <br>3. We also provide a compiled Go Scheduler Plugin compatible with the native Kubernetes Scheduling Framework (<code class="inline">PreFilter</code>, <code class="inline">Filter</code>, <code class="inline">Score</code>, <code class="inline">Bind</code> extension points), running with sub-millisecond execution overhead.</p>
+  </div>
+
+  <!-- SECTION 5: CONCLUSION & DEMO CLOSING -->
+  <div style="margin-top: 20px; padding: 12px 16px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px;">
+    <h3 style="color: #0f172a; margin-top: 0;">5. Concluding Statement to the Judges</h3>
+    <p style="font-size: 9pt; color: #334155; margin-bottom: 0;">
+      <i>"In conclusion, our project demonstrates that reactive autoscaling in modern cloud architectures is fundamentally inadequate for latency-critical workloads. By uniting deep learning time-series forecasting, multi-objective ranking, and native Kubernetes API scheduling, we have achieved an 84.8% tail latency reduction, zero SLO breaches, and a 16.8x improvement in cluster balance. The entire platform is deployed, verified, and ready for production cloud environments. Thank you, and we welcome your questions."</i>
+    </p>
+  </div>
+
+</body>
+</html>
+"""
+
+with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print(f"[OK] Generated HTML guide: {OUTPUT_HTML}")
+
+# Compile HTML to PDF using Microsoft Edge headless
+edge_bin = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+if not os.path.exists(edge_bin):
+    edge_bin = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+
+print(f"Compiling PDF via browser engine: {edge_bin}")
+cmd = [
+    edge_bin,
+    "--headless",
+    "--disable-gpu",
+    "--no-pdf-header-footer",
+    f"--print-to-pdf={OUTPUT_PDF}",
+    OUTPUT_HTML,
+]
+
+res = subprocess.run(cmd, capture_output=True, text=True)
+if os.path.exists(OUTPUT_PDF) and os.path.getsize(OUTPUT_PDF) > 0:
+    size_kb = os.path.getsize(OUTPUT_PDF) / 1024
+    print(f"[SUCCESS] PDF Guide generated successfully: {OUTPUT_PDF} ({size_kb:.1f} KB)")
+    
+    # Copy to evaluation, dist, and static directories
+    shutil.copyfile(OUTPUT_PDF, EVAL_PDF)
+    shutil.copyfile(OUTPUT_PDF, DIST_PDF)
+    shutil.copyfile(OUTPUT_PDF, STATIC_PDF)
+    print(f"[OK] Copied PDF to dist/ and web/static/ for instant web downloads.")
+else:
+    print(f"[ERROR] Failed to compile PDF: {res.stderr}")
